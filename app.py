@@ -1,151 +1,75 @@
-# COLMAN — wariant Streamlit
-# Parcia czynne na ścianę oporową Coulomba (odwzorowanie logiki z app.R)
+# ATLAS — wariant Streamlit
+# Parcia czynne na ściankę szczelną (logika z app.R)
 # Autor: Janusz Witalis Kozubal
 # Licencja: MIT License
-#
-# Copyright (c) 2024 Janusz Witalis Kozubal
 
 import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, Polygon as MplPolygon
 
-# --- Funkcje jak w R ---
 
+def obliczenia(load: float, h: float, fi: float, gamma: float, coh: float) -> dict:
+    ka = np.tan((45 - fi / 2) * np.pi / 180) ** 2
+    e_a = load * (1.5 / 1.35) * ka + ka * gamma * h - 2 * coh * np.sqrt(ka)
+    e_b = load * (1.5 / 1.35) * ka - 2 * coh * np.sqrt(ka)
 
-def kagamma(fi: float, beta: float, delta: float, epsilon: float) -> float:
-    fi_rad = np.radians(fi)
-    beta_rad = np.radians(beta)
-    delta_rad = np.radians(delta)
-    epsilon_rad = np.radians(epsilon)
-    num = np.cos(fi_rad - beta_rad) ** 2
-    den = np.cos(beta_rad + delta_rad)
-    inner = np.sin(fi_rad + delta_rad) * np.sin(fi_rad - epsilon_rad) / (
-        np.cos(beta_rad + delta_rad) * np.cos(epsilon_rad - beta_rad)
-    )
-    return num / den / (1 + np.sqrt(inner)) ** 2
+    if e_a > 0 and e_b > 0:
+        m0 = h
+        e_d = e_b
+    elif e_b < 0 and e_a < 0:
+        m0 = 0.0
+        e_d = 0.0
+    elif e_b < 0 and e_a > 0:
+        m0 = h * abs(e_a) / (e_a + abs(e_b))
+        e_d = 0.0
+    else:
+        # W oryginalnym R brak gałęzi dla części kombinacji — bezpieczny fallback
+        m0 = h
+        e_d = e_b
 
-
-def kaq(kagamma_val: float, epsilon: float, beta: float) -> float:
-    epsilon_rad = np.radians(epsilon)
-    beta_rad = np.radians(beta)
-    return kagamma_val / np.cos(epsilon_rad - beta_rad)
-
-
-def compute_all(
-    beta: float,
-    epsilon: float,
-    load: float,
-    h: float,
-    fi: float,
-    gamma: float,
-    delta_factor: float,
-):
-    delta_value = fi * delta_factor
-    kagamma_value = kagamma(fi, beta, delta_value, epsilon)
-    kaq_value = kaq(kagamma_value, epsilon, beta)
-    delta_rad = np.radians(delta_value)
-    beta_rad = -np.radians(beta)
-    epsilon_rad = -np.radians(epsilon)
-
-    ax, ay = 0.0, 0.0
-    bx = ax + h * np.tan(beta_rad)
-    by = ay + h
-    l_len = np.sqrt(bx**2 + by**2)
-    ea_a = load * kaq_value + kagamma_value * gamma * l_len
-    ea_b = load * kaq_value + 0.0
-
-    scale = 0.05
-    angle = -beta_rad + delta_rad
-    aax = ax + ea_a * np.cos(angle) * scale
-    aay = ay + ea_a * np.sin(angle) * scale
-    bax = bx + ea_b * np.cos(angle) * scale
-    bay = by + ea_b * np.sin(angle) * scale
-
-    df_pressure_x = np.array([ax, aax, bax, bx, ax])
-    df_pressure_y = np.array([ay, aay, bay, by, ay])
-
-    ea_ah = ea_a * np.cos(angle)
-    ea_av = ea_a * np.sin(angle)
-    ea_bh = ea_b * np.cos(angle)
-    ea_bv = ea_b * np.sin(angle)
-
-    fh = (ea_bh + ea_ah) * l_len / 2
-    fv = (ea_bv + ea_av) * l_len / 2
-    hyy = (
-        ea_bh * l_len * 0.5 * h + 0.3333 * 0.5 * h * (ea_ah - ea_bh) * l_len
-    ) / fh
-
-    vector_position_x = hyy * np.tan(beta_rad)
-    vector_position_y = hyy
-
-    cx = bx + h / np.cos(epsilon_rad)
-    cy = by - h * np.tan(epsilon_rad)
-    dx, dy = cx, 0.0
-    fx, fy = bx, by
-    gx, gy = cx, cy
-    # jak w R: Hx <- Fx; Hy <- Fy + load*scale; Ix <- Gx; Iy <- Gy + load*scale
-    hx_r = fx
-    hy_r = fy + load * scale
-    ix_r = gx
-    iy_r = gy + load * scale
-
-    df_figure_x = np.array([ax, bx, cx, dx, ax])
-    df_figure_y = np.array([ay, by, cy, dy, ay])
-    df_rhomb_x = np.array([fx, gx, ix_r, hx_r, fx])
-    df_rhomb_y = np.array([fy, gy, iy_r, hy_r, fy])
-
-    vectors = {
-        "x": np.array([aax, bax]),
-        "y": np.array([aay, bay]),
-        "xend": np.array([ax, bx]),
-        "yend": np.array([ay, by]),
-    }
+    fh = 0.5 * (e_a + e_d) * m0
+    if fh != 0:
+        hyy = (0.5 * m0**2 * e_d + (1 / 6) * m0**2 * (e_a - e_d)) / fh
+    else:
+        hyy = float("nan")
 
     return {
-        "kagamma_value": kagamma_value,
-        "kaq_value": kaq_value,
-        "delta_value": delta_value,
-        "ax": ax,
-        "ay": ay,
-        "bx": bx,
-        "by": by,
-        "cx": cx,
-        "cy": cy,
-        "fh": fh,
-        "fv": fv,
-        "hyy": hyy,
-        "ea_a": ea_a,
-        "ea_b": ea_b,
-        "scale": scale,
-        "vector_position_x": vector_position_x,
-        "vector_position_y": vector_position_y,
-        "df_pressure_x": df_pressure_x,
-        "df_pressure_y": df_pressure_y,
-        "df_figure_x": df_figure_x,
-        "df_figure_y": df_figure_y,
-        "df_rhomb_x": df_rhomb_x,
-        "df_rhomb_y": df_rhomb_y,
-        "vectors": vectors,
-        "by_for_text": by,
-        "h": h,
+        "eA": e_a,
+        "eB": e_b,
+        "Hyy": hyy,
+        "M0": m0,
+        "eD": e_d,
+        "Ka": ka,
+        "Fh": fh,
+        "H": h,
+        "load": load,
     }
 
 
-def draw_figure(res: dict, gamma: float, fi: float, epsilon: float, beta: float) -> plt.Figure:
+def draw_plot(w: dict) -> plt.Figure:
+    h = w["H"]
+    load = w["load"]
     fig, axp = plt.subplots(figsize=(8, 8))
 
-    # Żółty obrys skarpy
-    poly_yellow = np.column_stack([res["df_figure_x"], res["df_figure_y"]])
-    axp.add_patch(
-        MplPolygon(poly_yellow, closed=True, facecolor="yellow", edgecolor="black", linewidth=0.5)
-    )
-
-    # Czerwony romb ze wzorem (pionowe kreski — odpowiednik ggpattern)
-    poly_red = np.column_stack([res["df_rhomb_x"], res["df_rhomb_y"]])
+    # Prostokąty jak w R (szerokość 5 m)
+    df_figure_x = np.array([0, 5, 5, 0, 0])
+    df_figure_y = np.array([0, 0, h, h, 0])
     axp.add_patch(
         MplPolygon(
-            poly_red,
+            np.column_stack([df_figure_x, df_figure_y]),
+            closed=True,
+            facecolor="yellow",
+            edgecolor="black",
+            linewidth=0.5,
+        )
+    )
+
+    df_rhomb_x = np.array([0, 5, 5, 0, 0])
+    df_rhomb_y = np.array([h, h, h + load / 10, h + load / 10, h])
+    axp.add_patch(
+        MplPolygon(
+            np.column_stack([df_rhomb_x, df_rhomb_y]),
             closed=True,
             facecolor="red",
             edgecolor="darkred",
@@ -154,126 +78,126 @@ def draw_figure(res: dict, gamma: float, fi: float, epsilon: float, beta: float)
         )
     )
 
-    # Ściana AB
-    axp.plot(
-        [res["ax"], res["bx"]],
-        [res["ay"], res["by"]],
-        color="black",
-        linewidth=3,
-        solid_capstyle="round",
-    )
-
-    # Szare parcie
-    poly_gray = np.column_stack([res["df_pressure_x"], res["df_pressure_y"]])
+    e_a, e_b = w["eA"], w["eB"]
+    m0, e_d = w["M0"], w["eD"]
+    df_pressure_an_x = np.array([0, e_a / 10, e_d / 10, 0, 0])
+    df_pressure_an_y = np.array([0, 0, m0, m0, 0])
     axp.add_patch(
-        MplPolygon(poly_gray, closed=True, facecolor="gray", edgecolor="gray", alpha=0.5)
-    )
-
-    mx = np.mean(res["df_figure_x"])
-    my = np.mean(res["df_figure_y"]) / 2
-    axp.text(
-        mx,
-        my,
-        (
-            f"WYNIKI na 1 mb\nKaq (-): {res['kaq_value']:.3f}\n"
-            f"Kagamma (-): {res['kagamma_value']:.3f}\n"
-            f"Składowa pozioma siła (kN): {res['fh']:.3f}\n"
-            f"Składowa pionowa siła (kN): {res['fv']:.3f}\n"
-            f"Wysokość zaczepienia y (m): {res['hyy']:.3f}"
-        ),
-        fontsize=9,
-        ha="center",
-        va="center",
-    )
-
-    axp.text(res["ax"], res["ay"], f"ea(0,0): {res['ea_a']:.3f}", fontsize=10, ha="left", va="bottom")
-    axp.text(res["bx"], res["by"], f"ea(Bx,By): {res['ea_b']:.3f}", fontsize=10, ha="center", va="top")
-
-    parametry = (
-        f"Parametry:\nGamma (kN/m^3): {gamma}\n"
-        f"Fi (deg): {fi}\n"
-        f"Delta (deg): {res['delta_value']:.4g}\n"
-        f"Epsilon (deg): {epsilon}\n"
-        f"Beta (deg): {beta}\n\n"
-        "Autor: JVK ver 1.0 2024"
-    )
-    axp.text(res["by_for_text"], 1.0, parametry, fontsize=9, ha="center", va="bottom")
-
-    vx = res["vector_position_x"]
-    vy = res["vector_position_y"]
-    sc = res["scale"]
-
-    # Strzałki wypadkowych (jak geom_segment z arrow)
-    arr_h = FancyArrowPatch(
-        (vx + res["fh"] * sc, vy),
-        (vx, vy),
-        arrowstyle="->",
-        mutation_scale=12,
-        color="black",
-    )
-    arr_v = FancyArrowPatch(
-        (vx, vy + res["fv"] * sc),
-        (vx, vy),
-        arrowstyle="->",
-        mutation_scale=12,
-        color="black",
-    )
-    axp.add_patch(arr_h)
-    axp.add_patch(arr_v)
-
-    vdf = res["vectors"]
-    for i in range(len(vdf["x"])):
-        arr = FancyArrowPatch(
-            (vdf["x"][i], vdf["y"][i]),
-            (vdf["xend"][i], vdf["yend"][i]),
-            arrowstyle="->",
-            mutation_scale=12,
-            color="black",
+        MplPolygon(
+            np.column_stack([df_pressure_an_x, df_pressure_an_y]),
+            closed=True,
+            facecolor="pink",
+            edgecolor="deeppink",
+            linewidth=0.5,
+            hatch="---",
         )
-        axp.add_patch(arr)
+    )
+
+    # Kolejność jak w ggplot: ściana, potem szary trapez (teoretyczny)
+    axp.plot([0, 0], [0, h], color="black", linewidth=3, solid_capstyle="round")
+
+    df_pressure_x = np.array([0, e_a / 10, e_b / 10, 0, 0])
+    df_pressure_y = np.array([0, 0, h, h, 0])
+    axp.add_patch(
+        MplPolygon(
+            np.column_stack([df_pressure_x, df_pressure_y]),
+            closed=True,
+            facecolor="gray",
+            edgecolor="gray",
+            alpha=0.5,
+        )
+    )
+
+    # Strzałki niebieskie: od (e/10, y) do (0, y)
+    for x0, y0 in [(e_a / 10, 0), (e_b / 10, h)]:
+        axp.add_patch(
+            FancyArrowPatch(
+                (x0, y0),
+                (0, y0),
+                arrowstyle="->",
+                mutation_scale=12,
+                color="blue",
+                linewidth=1,
+            )
+        )
+
+    hyy, fh = w["Hyy"], w["Fh"]
+    if not np.isnan(hyy) and fh != 0:
+        axp.add_patch(
+            FancyArrowPatch(
+                (fh / 30, hyy),
+                (0, hyy),
+                arrowstyle="->",
+                mutation_scale=14,
+                color="green",
+                linewidth=2,
+            )
+        )
+
+    axp.plot([0], [m0], marker="o", color="purple", markersize=8, linestyle="none")
+
+    axp.annotate("JVK 2024 MIT Licence", xy=(2, -0.2), fontsize=9, ha="center", va="top")
 
     axp.set_aspect("equal", adjustable="box")
-    axp.set_title("Rysunek skarpy z obciążeniem")
+    axp.set_title("Ścianka szczelna - parcia czynne")
     axp.set_xlabel("X")
     axp.set_ylabel("Y")
-    axp.grid(False)
-    for spine in axp.spines.values():
-        spine.set_visible(True)
     axp.set_facecolor("white")
     fig.patch.set_facecolor("white")
     plt.tight_layout()
     return fig
 
 
+@st.dialog("Wyniki i założenia do obliczeń", width="large")
+def wyniki_dialog(w: dict) -> None:
+    hyy_txt = f"{w['Hyy']:.2f}" if not np.isnan(w["Hyy"]) else "—"
+    st.markdown(
+        f"""
+Do obliczeń zastosowano założenia: ścianka gładka, naziom poziomy, obciążenie zmienne naziomu o stałej intensywności, skarpa pionowa, przemieszczenie nastepuje od gruntu.
+
+Analizę przeprowadzono dla 1 mb ściany. Kolor różowy parcia na ścianę, kolor szary parcia teoretyczne. Kolor żółty - grunt, kolor czerwony to obciżęnie skarpy. Wynikiem obliczeń jest wypadkowa - zielony wektor.
+
+- Naprężenia teoretyczne na poziomie podstawy (kPa): **{w['eA']:.2f}**
+- Naprężenia teoretyczne na wysokości korony skarpy (kPa): **{w['eB']:.2f}**
+- Wynikająca siła pozioma F (kN): **{w['Fh']:.2f}** kN
+- Poziom podstawy (m): **0.0 m**
+- Wysokość samostatecznej części ściany mierząc od korony (m): **{w['H'] - w['M0']:.2f}**
+- Wysokość działania siły poziomej F od podstawy (m): **{hyy_txt}**
+- Wysokość skarpy H (m): **{w['H']:.2f}**
+- Współczynnik rozdziału naprężeń czynnych K_a ( ): **{w['Ka']:.3f}**
+- Obciążenie korony skarpy zwiększono o współczynnik 1.5/1.35 (kPa): **{w['load'] * (1.5 / 1.35):.2f}**
+        """
+    )
+
+
 def main():
-    st.set_page_config(page_title="Parcia czynne — skarpa", layout="wide")
-    st.title("Animacja parć czynnych dla skarpy z obciążeniem")
+    st.set_page_config(page_title="ATLAS — parcia czynne", layout="wide")
+    st.markdown(
+        "[Kup mi kawę - utrzymanie serwera i wsparcie dla nowych programów](https://buycoffee.to/jan.vit)"
+    )
+    st.title("Parcia czynne dla skarpy z obciążeniem")
 
     col_side, col_main = st.columns([1, 2])
 
     with col_side:
-        beta = st.slider("Kąt beta - odchylenie od pionu (stopni):", -35, 35, -10, 1)
-        epsilon = st.slider("Kąt epsilon - nachylenie naziomu skarpy (stopni):", -20, 20, 10, 1)
         load = st.slider("Obciążenie skarpy (kPa):", 0.0, 20.0, 10.0, 1.0)
-        h = st.slider("Wysokość skarpy H (m):", 1.0, 10.0, 5.0, 0.5)
+        h = st.slider("Wysokość skarpy H (m):", 1.0, 10.0, 3.0, 0.5)
         fi = st.slider("Kąt tarcia wewnętrznego gruntu fi (stopni):", 0, 40, 25, 1)
         gamma = st.slider("Ciężar obj. gruntu - gamma (kN/m^3):", 8.0, 25.0, 20.0, 0.5)
-        delta_choice = st.selectbox(
-            "Kąt delta tarcia grunt ściana (stopni):",
-            options=["0", "1/3 fi", "2/3 fi", "fi"],
-            index=1,
-        )
-        delta_map = {"0": 0.0, "1/3 fi": 1 / 3, "2/3 fi": 2 / 3, "fi": 1.0}
-        delta_factor = delta_map[delta_choice]
+        coh = st.slider("Spójność (kPa):", 0.0, 50.0, 5.0, 1.0)
+        show_clicked = st.button("Pokaż wyniki i założenia")
 
-    res = compute_all(beta, epsilon, load, h, fi, gamma, delta_factor)
+    wyniki = obliczenia(load, h, fi, gamma, coh)
 
     with col_main:
-        fig = draw_figure(res, gamma, fi, epsilon, beta)
+        fig = draw_plot(wyniki)
         st.pyplot(fig)
         plt.close(fig)
 
-    st.caption("COLMAN — Streamlit; logika zgodna z aplikacją Shiny (app.R).")
+    if show_clicked:
+        wyniki_dialog(wyniki)
+
+    st.caption("ATLAS — Streamlit; logika zgodna z aplikacją Shiny (app.R).")
 
 
 if __name__ == "__main__":
