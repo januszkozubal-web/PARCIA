@@ -11,6 +11,20 @@ from matplotlib.patches import FancyArrowPatch, Polygon as MplPolygon
 
 def obliczenia(load: float, h: float, fi: float, gamma: float, coh: float) -> dict:
     ka = np.tan((45 - fi / 2) * np.pi / 180) ** 2
+    # Odpór: dla tego samego modelu Rankine’a Kp = 1/Ka (φ takie samo)
+    kp = 1.0 / max(ka, 1e-15)
+    q_red = load * (1.5 / 1.35)
+    sqrt_kp = np.sqrt(kp)
+    # Naprężenia poziome przy odporze (Rankine): σp = σv' Kp + 2 c √Kp
+    p_a = q_red * kp + kp * gamma * h + 2 * coh * sqrt_kp
+    p_b = q_red * kp + 2 * coh * sqrt_kp
+    fh_p = 0.5 * (p_a + p_b) * h
+    denom = p_a + p_b
+    if denom != 0 and fh_p != 0:
+        hyy_p = h * (p_a + 2 * p_b) / (3 * denom)
+    else:
+        hyy_p = float("nan")
+
     e_a = load * (1.5 / 1.35) * ka + ka * gamma * h - 2 * coh * np.sqrt(ka)
     e_b = load * (1.5 / 1.35) * ka - 2 * coh * np.sqrt(ka)
 
@@ -44,6 +58,11 @@ def obliczenia(load: float, h: float, fi: float, gamma: float, coh: float) -> di
         "Fh": fh,
         "H": h,
         "load": load,
+        "Kp": kp,
+        "pA": p_a,
+        "pB": p_b,
+        "Fh_passive": fh_p,
+        "Hyy_passive": hyy_p,
     }
 
 
@@ -151,6 +170,7 @@ def draw_plot(w: dict) -> plt.Figure:
 @st.dialog("Wyniki i założenia do obliczeń", width="large")
 def wyniki_dialog(w: dict) -> None:
     hyy_txt = f"{w['Hyy']:.2f}" if not np.isnan(w["Hyy"]) else "—"
+    hyy_p_txt = f"{w['Hyy_passive']:.2f}" if not np.isnan(w["Hyy_passive"]) else "—"
     st.markdown(
         f"""
 Do obliczeń zastosowano założenia: ścianka gładka, naziom poziomy, obciążenie zmienne naziomu o stałej intensywności, skarpa pionowa, przemieszczenie nastepuje od gruntu.
@@ -166,6 +186,16 @@ Analizę przeprowadzono dla 1 mb ściany. Kolor różowy parcia na ścianę, kol
 - Wysokość skarpy H (m): **{w['H']:.2f}**
 - Współczynnik rozdziału naprężeń czynnych K_a ( ): **{w['Ka']:.3f}**
 - Obciążenie korony skarpy zwiększono o współczynnik 1.5/1.35 (kPa): **{w['load'] * (1.5 / 1.35):.2f}**
+
+---
+
+**Odpór (Rankine, K_p = 1/K_a, to samo φ i c):**
+
+- K_p (—): **{w['Kp']:.4f}**
+- Naprężenie odporu u podstawy σ_p (kPa): **{w['pA']:.2f}**
+- Naprężenie odporu u korony σ_p (kPa): **{w['pB']:.2f}**
+- Siła odporu pozioma R (kN/m): **{w['Fh_passive']:.2f}**
+- Wysokość działania R od podstawy (m): **{hyy_p_txt}**
         """
     )
 
@@ -188,6 +218,24 @@ def main():
         show_clicked = st.button("Pokaż wyniki i założenia")
 
     wyniki = obliczenia(load, h, fi, gamma, coh)
+
+    with col_side:
+        with st.expander("Odpór (K_p = 1/K_a)", expanded=False):
+            st.caption(
+                "Rankine: σ_p = σ_v' K_p + 2c√K_p; K_p = 1/K_a; rozkład liniowy na H → R i wysokość od podstawy."
+            )
+            st.metric("K_p", f"{wyniki['Kp']:.4f}")
+            c1, c2 = st.columns(2)
+            c1.metric("σ_p u podstawy (kPa)", f"{wyniki['pA']:.2f}")
+            c2.metric("σ_p u korony (kPa)", f"{wyniki['pB']:.2f}")
+            c3, c4 = st.columns(2)
+            hy_p_txt = (
+                f"{wyniki['Hyy_passive']:.2f}"
+                if not np.isnan(wyniki["Hyy_passive"])
+                else "—"
+            )
+            c3.metric("Siła odporu R (kN/m)", f"{wyniki['Fh_passive']:.2f}")
+            c4.metric("Wys. R od podstawy (m)", hy_p_txt)
 
     with col_main:
         fig = draw_plot(wyniki)
