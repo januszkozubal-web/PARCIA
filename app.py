@@ -66,7 +66,8 @@ def obliczenia(load: float, h: float, fi: float, gamma: float, coh: float) -> di
     }
 
 
-def draw_plot(w: dict) -> plt.Figure:
+def draw_plot(w: dict, tryb: str) -> plt.Figure:
+    """tryb: 'czynne' | 'pasywne' — wykres i opisy dopasowane do parć czynnych lub odporu."""
     h = w["H"]
     load = w["load"]
     fig, axp = plt.subplots(figsize=(8, 8))
@@ -99,66 +100,135 @@ def draw_plot(w: dict) -> plt.Figure:
 
     e_a, e_b = w["eA"], w["eB"]
     m0, e_d = w["M0"], w["eD"]
-    df_pressure_an_x = np.array([0, e_a / 10, e_d / 10, 0, 0])
-    df_pressure_an_y = np.array([0, 0, m0, m0, 0])
-    axp.add_patch(
-        MplPolygon(
-            np.column_stack([df_pressure_an_x, df_pressure_an_y]),
-            closed=True,
-            facecolor="pink",
-            edgecolor="deeppink",
-            linewidth=0.5,
-            hatch="---",
-        )
-    )
+    p_a, p_b = w["pA"], w["pB"]
 
-    # Kolejność jak w ggplot: ściana, potem szary trapez (teoretyczny)
-    axp.plot([0, 0], [0, h], color="black", linewidth=3, solid_capstyle="round")
-
-    df_pressure_x = np.array([0, e_a / 10, e_b / 10, 0, 0])
-    df_pressure_y = np.array([0, 0, h, h, 0])
-    axp.add_patch(
-        MplPolygon(
-            np.column_stack([df_pressure_x, df_pressure_y]),
-            closed=True,
-            facecolor="gray",
-            edgecolor="gray",
-            alpha=0.5,
-        )
-    )
-
-    # Strzałki niebieskie: od (e/10, y) do (0, y)
-    for x0, y0 in [(e_a / 10, 0), (e_b / 10, h)]:
+    if tryb == "czynne":
+        df_pressure_an_x = np.array([0, e_a / 10, e_d / 10, 0, 0])
+        df_pressure_an_y = np.array([0, 0, m0, m0, 0])
         axp.add_patch(
-            FancyArrowPatch(
-                (x0, y0),
-                (0, y0),
-                arrowstyle="->",
-                mutation_scale=12,
-                color="blue",
-                linewidth=1,
+            MplPolygon(
+                np.column_stack([df_pressure_an_x, df_pressure_an_y]),
+                closed=True,
+                facecolor="pink",
+                edgecolor="deeppink",
+                linewidth=0.5,
+                hatch="---",
             )
         )
 
-    hyy, fh = w["Hyy"], w["Fh"]
-    if not np.isnan(hyy) and fh != 0:
+        axp.plot([0, 0], [0, h], color="black", linewidth=3, solid_capstyle="round")
+
+        df_pressure_x = np.array([0, e_a / 10, e_b / 10, 0, 0])
+        df_pressure_y = np.array([0, 0, h, h, 0])
         axp.add_patch(
-            FancyArrowPatch(
-                (fh / 30, hyy),
-                (0, hyy),
-                arrowstyle="->",
-                mutation_scale=14,
-                color="green",
-                linewidth=2,
+            MplPolygon(
+                np.column_stack([df_pressure_x, df_pressure_y]),
+                closed=True,
+                facecolor="gray",
+                edgecolor="gray",
+                alpha=0.5,
             )
         )
 
-    axp.plot([0], [m0], marker="o", color="purple", markersize=8, linestyle="none")
+        for x0, y0 in [(e_a / 10, 0), (e_b / 10, h)]:
+            axp.add_patch(
+                FancyArrowPatch(
+                    (x0, y0),
+                    (0, y0),
+                    arrowstyle="->",
+                    mutation_scale=12,
+                    color="blue",
+                    linewidth=1,
+                )
+            )
+
+        hyy, fh = w["Hyy"], w["Fh"]
+        if not np.isnan(hyy) and fh != 0:
+            axp.add_patch(
+                FancyArrowPatch(
+                    (fh / 30, hyy),
+                    (0, hyy),
+                    arrowstyle="->",
+                    mutation_scale=14,
+                    color="green",
+                    linewidth=2,
+                )
+            )
+
+        axp.plot([0], [m0], marker="o", color="purple", markersize=8, linestyle="none")
+        tytul = "Ścianka szczelna — parcia czynne"
+        opis_trybu = "PARCIE CZYNNE (Rankine, K_a)"
+    else:
+        # Pasywne: trapez σ od podstawy (pA) do korony (pB), pełna wysokość H (jak czynne: szary → ściana → różowy)
+        df_pass_x = np.array([0, p_a / 10, p_b / 10, 0, 0])
+        df_pass_y = np.array([0, 0, h, h, 0])
+        axp.add_patch(
+            MplPolygon(
+                np.column_stack([df_pass_x, df_pass_y]),
+                closed=True,
+                facecolor="gray",
+                edgecolor="gray",
+                alpha=0.5,
+            )
+        )
+
+        axp.plot([0, 0], [0, h], color="black", linewidth=3, solid_capstyle="round")
+
+        axp.add_patch(
+            MplPolygon(
+                np.column_stack([df_pass_x, df_pass_y]),
+                closed=True,
+                facecolor="pink",
+                edgecolor="deeppink",
+                linewidth=0.5,
+                hatch="---",
+            )
+        )
+
+        for x0, y0 in [(p_a / 10, 0), (p_b / 10, h)]:
+            axp.add_patch(
+                FancyArrowPatch(
+                    (x0, y0),
+                    (0, y0),
+                    arrowstyle="->",
+                    mutation_scale=12,
+                    color="blue",
+                    linewidth=1,
+                )
+            )
+
+        hyy_p, fh_p = w["Hyy_passive"], w["Fh_passive"]
+        if not np.isnan(hyy_p) and fh_p != 0:
+            axp.add_patch(
+                FancyArrowPatch(
+                    (fh_p / 30, hyy_p),
+                    (0, hyy_p),
+                    arrowstyle="->",
+                    mutation_scale=14,
+                    color="green",
+                    linewidth=2,
+                )
+            )
+
+        if not np.isnan(hyy_p):
+            axp.plot([0], [hyy_p], marker="o", color="purple", markersize=8, linestyle="none")
+        tytul = "Ścianka szczelna — odpór pasywny"
+        opis_trybu = "ODPÓR PASYWNY (Rankine, K_p = 1/K_a)"
 
     axp.annotate("JVK 2024 MIT Licence", xy=(2, -0.2), fontsize=9, ha="center", va="top")
+    axp.text(
+        0.02,
+        0.98,
+        opis_trybu,
+        transform=axp.transAxes,
+        fontsize=11,
+        fontweight="bold",
+        verticalalignment="top",
+        bbox=dict(boxstyle="round,pad=0.35", facecolor="white", edgecolor="black", alpha=0.92),
+    )
 
     axp.set_aspect("equal", adjustable="box")
-    axp.set_title("Ścianka szczelna - parcia czynne")
+    axp.set_title(tytul)
     axp.set_xlabel("X")
     axp.set_ylabel("Y")
     axp.set_facecolor("white")
@@ -210,6 +280,12 @@ def main():
     col_side, col_main = st.columns([1, 2])
 
     with col_side:
+        tryb = st.radio(
+            "Wykres — stan gruntu:",
+            ["czynne", "pasywne"],
+            format_func=lambda x: "Parcia czynne (K_a)" if x == "czynne" else "Odpór pasywny (K_p = 1/K_a)",
+            horizontal=True,
+        )
         load = st.slider("Obciążenie skarpy (kPa):", 0.0, 20.0, 10.0, 1.0)
         h = st.slider("Wysokość skarpy H (m):", 1.0, 10.0, 3.0, 0.5)
         fi = st.slider("Kąt tarcia wewnętrznego gruntu fi (stopni):", 0, 40, 25, 1)
@@ -238,7 +314,7 @@ def main():
             c4.metric("Wys. R od podstawy (m)", hy_p_txt)
 
     with col_main:
-        fig = draw_plot(wyniki)
+        fig = draw_plot(wyniki, tryb)
         st.pyplot(fig)
         plt.close(fig)
 
