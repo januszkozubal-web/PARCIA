@@ -240,7 +240,6 @@ def draw_plot(w: dict, tryb: str) -> plt.Figure:
 @st.dialog("Wyniki i założenia do obliczeń", width="large")
 def wyniki_dialog(w: dict) -> None:
     hyy_txt = f"{w['Hyy']:.2f}" if not np.isnan(w["Hyy"]) else "—"
-    hyy_p_txt = f"{w['Hyy_passive']:.2f}" if not np.isnan(w["Hyy_passive"]) else "—"
     st.markdown(
         f"""
 Do obliczeń zastosowano założenia: ścianka gładka, naziom poziomy, obciążenie zmienne naziomu o stałej intensywności, skarpa pionowa, przemieszczenie nastepuje od gruntu.
@@ -256,16 +255,6 @@ Analizę przeprowadzono dla 1 mb ściany. Kolor różowy parcia na ścianę, kol
 - Wysokość skarpy H (m): **{w['H']:.2f}**
 - Współczynnik rozdziału naprężeń czynnych K_a ( ): **{w['Ka']:.3f}**
 - Obciążenie korony skarpy zwiększono o współczynnik 1.5/1.35 (kPa): **{w['load'] * (1.5 / 1.35):.2f}**
-
----
-
-**Odpór (Rankine, K_p = 1/K_a, to samo φ i c):**
-
-- K_p (—): **{w['Kp']:.4f}**
-- Naprężenie odporu u podstawy σ_p (kPa): **{w['pA']:.2f}**
-- Naprężenie odporu u korony σ_p (kPa): **{w['pB']:.2f}**
-- Siła odporu pozioma R (kN/m): **{w['Fh_passive']:.2f}**
-- Wysokość działania R od podstawy (m): **{hyy_p_txt}**
         """
     )
 
