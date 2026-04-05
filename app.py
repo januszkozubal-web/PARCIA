@@ -11,13 +11,14 @@ from matplotlib.patches import FancyArrowPatch, Polygon as MplPolygon
 
 def obliczenia(load: float, h: float, fi: float, gamma: float, coh: float) -> dict:
     ka = np.tan((45 - fi / 2) * np.pi / 180) ** 2
-    # Odpór: dla tego samego modelu Rankine’a Kp = 1/Ka (φ takie samo)
+    # Odpór: dla tego samego modelu Rankine’a K_p = 1/K_a (φ takie samo)
     kp = 1.0 / max(ka, 1e-15)
-    q_red = load * (1.5 / 1.35)
     sqrt_kp = np.sqrt(kp)
-    # Naprężenia poziome przy odporze (Rankine): σp = σv' Kp + 2 c √Kp
-    p_a = q_red * kp + kp * gamma * h + 2 * coh * sqrt_kp
-    p_b = q_red * kp + 2 * coh * sqrt_kp
+    # Parcie bierne (pasywne): σ_p = K_p · σ_z + 2 c √K_p; σ_z z q_k, γ charakt.
+    sigma_z_korona = load
+    sigma_z_podstawa = load + gamma * h
+    p_a = kp * sigma_z_podstawa + 2 * coh * sqrt_kp
+    p_b = kp * sigma_z_korona + 2 * coh * sqrt_kp
     fh_p = 0.5 * (p_a + p_b) * h
     denom = p_a + p_b
     if denom != 0 and fh_p != 0:
@@ -25,8 +26,10 @@ def obliczenia(load: float, h: float, fi: float, gamma: float, coh: float) -> di
     else:
         hyy_p = float("nan")
 
-    e_a = load * (1.5 / 1.35) * ka + ka * gamma * h - 2 * coh * np.sqrt(ka)
-    e_b = load * (1.5 / 1.35) * ka - 2 * coh * np.sqrt(ka)
+    # Parcia czynne — wartości charakterystyczne: q, γ, c, φ (bez współczynników częściowych)
+    q_k = load
+    e_a = q_k * ka + ka * gamma * h - 2 * coh * np.sqrt(ka)
+    e_b = q_k * ka - 2 * coh * np.sqrt(ka)
 
     if e_a > 0 and e_b > 0:
         m0 = h
@@ -244,6 +247,8 @@ def wyniki_dialog(w: dict) -> None:
         f"""
 Do obliczeń zastosowano założenia: ścianka gładka, naziom poziomy, obciążenie zmienne naziomu o stałej intensywności, skarpa pionowa, przemieszczenie nastepuje od gruntu.
 
+**Wszystkie wielkości są liczone na wartościach charakterystycznych** (q, γ, c, φ — bez współczynników częściowych). Przy projektowaniu wg EN 1997 typowo stosuje się m.in. γ_Q = 1,5 na obciążenie zmienne i γ_φ = 1,35 na parametry gruntu — **nie są one wprowadzane w tej aplikacji**.
+
 Analizę przeprowadzono dla 1 mb ściany. Kolor różowy parcia na ścianę, kolor szary parcia teoretyczne. Kolor żółty - grunt, kolor czerwony to obciżęnie skarpy. Wynikiem obliczeń jest wypadkowa - zielony wektor.
 
 - Naprężenia teoretyczne na poziomie podstawy (kPa): **{w['eA']:.2f}**
@@ -254,7 +259,7 @@ Analizę przeprowadzono dla 1 mb ściany. Kolor różowy parcia na ścianę, kol
 - Wysokość działania siły poziomej F od podstawy (m): **{hyy_txt}**
 - Wysokość skarpy H (m): **{w['H']:.2f}**
 - Współczynnik rozdziału naprężeń czynnych K_a ( ): **{w['Ka']:.3f}**
-- Obciążenie korony skarpy zwiększono o współczynnik 1.5/1.35 (kPa): **{w['load'] * (1.5 / 1.35):.2f}**
+- Obciążenie charakterystyczne korony q (kPa): **{w['load']:.2f}**
         """
     )
 
@@ -275,7 +280,7 @@ def main():
             format_func=lambda x: "Parcia czynne (K_a)" if x == "czynne" else "Odpór pasywny (K_p = 1/K_a)",
             horizontal=True,
         )
-        load = st.slider("Obciążenie skarpy (kPa):", 0.0, 20.0, 10.0, 1.0)
+        load = st.slider("Obciążenie korony q — charakt. (kPa):", 0.0, 20.0, 10.0, 1.0)
         h = st.slider("Wysokość skarpy H (m):", 1.0, 10.0, 3.0, 0.5)
         fi = st.slider("Kąt tarcia wewnętrznego gruntu fi (stopni):", 0, 40, 25, 1)
         gamma = st.slider("Ciężar obj. gruntu - gamma (kN/m^3):", 8.0, 25.0, 20.0, 0.5)
@@ -287,7 +292,7 @@ def main():
     with col_side:
         with st.expander("Odpór (K_p = 1/K_a)", expanded=False):
             st.caption(
-                "Rankine: σ_p = σ_v' K_p + 2c√K_p; K_p = 1/K_a; rozkład liniowy na H → R i wysokość od podstawy."
+                "Wartości charakterystyczne. σ_p = K_p·σ_z + 2c√K_p; σ_z = q+γH u podstawy, σ_z = q u korony; K_p = 1/K_a."
             )
             st.metric("K_p", f"{wyniki['Kp']:.4f}")
             c1, c2 = st.columns(2)
@@ -310,7 +315,10 @@ def main():
     if show_clicked:
         wyniki_dialog(wyniki)
 
-    st.caption("ATLAS — Streamlit; logika zgodna z aplikacją Shiny (app.R).")
+    st.caption(
+        "ATLAS — Streamlit; obliczenia na wartościach charakterystycznych (bez γ=1,5/1,35 w wzorach). "
+        "Oryginalna aplikacja Shiny stosowała q·(1,5/1,35) przy parciu czynnym."
+    )
 
 
 if __name__ == "__main__":
